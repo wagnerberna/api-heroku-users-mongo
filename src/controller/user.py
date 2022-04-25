@@ -2,105 +2,115 @@ from flask import Response, request
 from flask_restx import Resource
 from flask_jwt_extended import jwt_required
 from src.model.user import UserModel
+from src.model.login import LoginModel
 from src.service.mail import Mail
-from src.service.payload.user import users_ns, user_post_put_fields, token_header
-from src.service.message import *
+from src.core.user import UserCore
+from src.resources.user_ns_payload import (
+    user_ns,
+    user_post_fields,
+    user_put_fields,
+    token_header,
+)
+from src.static.message import *
+from src.model.dto.userDto import UserDtoAdd, UserDtoUpdate
 
+user_model = UserModel()
+login_model = LoginModel()
+user_core = UserCore()
 
 # GetAll
-@users_ns.route('users')
 class UsersController(Resource):
     def get(self):
         try:
-            data_users = UserModel().get_all()
+            payload_users = user_model.get_all()
 
-            if data_users == None:
+            if payload_users == None:
                 return USER_NOT_FOUND, 404
-            
-            # converte todos ids da lista em string
-            for user in data_users:
-                user['_id'] = str(user['_id'])
-                # del user['password']
-            return data_users, 200
+            return payload_users, 200
 
-        except:
+        except Exception as error:
+            print(ERROR_MESSAGE.format(error))
             return INTERNAL_ERROR, 500
 
 
 # Post
-@users_ns.route('useradd')
 class UserAddController(Resource):
-    @users_ns.expect(user_post_put_fields)
+    @user_ns.expect(user_post_fields)
     def post(self):
         try:
-            new_user = request.get_json()
-            # print(new_user)
-            activated = False
-            user_add = UserModel().add(activated, **new_user)
-            # id do ítem adicionado
-            id = user_add.inserted_id
-            print(id)
-            
-            # envio do email:
-            template_path_confirm = 'src/templates/mail_confirm.html'
-            email_to = 'wag.backend@gmail.com'
-            Mail().send_mail(new_user['login'], new_user['name'], email_to, template_path_confirm)
-            
-            return {'message': 'user created', 'id': f'{id}'}, 201
+            new_user = UserDtoAdd.parse_obj(request.get_json())
+            payload = user_core.payload_new_user(new_user)
+            find_login_db = login_model.find_login(payload.login)
 
-        except:
+            if find_login_db:
+                return LOGIN_ALREDY_EXISTS, 409
+
+            user_add = user_model.add(payload)
+            # id = user_add.inserted_id
+            # print("_id:", id)
+
+            if user_add == None:
+                return USER_NOT_CREATED, 409
+
+            # send mail:
+            template_path_confirm = "src/templates/mail_confirm.html"
+            Mail().send_mail(
+                payload.login,
+                payload.name,
+                payload.email,
+                template_path_confirm,
+            )
+
+            return USER_CREATED, 201
+
+        except Exception as error:
+            print(ERROR_MESSAGE.format(error))
             return INTERNAL_ERROR, 500
 
 
 # GetById / Update / Delete
-@users_ns.route('user/<id>')
 class UserController(Resource):
     def get(self, id):
         try:
-            data_user = UserModel().get_by_id(id)
-            print(data_user)
+            data_user = user_model.get_by_id(id)
 
             if data_user == None:
                 return USER_NOT_FOUND, 404
-            
-            id_db = str(data_user.get('_id'))
-            name = data_user.get('name')
-            login = data_user.get('login')
-            email = data_user.get('email')
-            activated = data_user.get('activated')
 
-            if data_user:
-                return {'id': id_db, 'name': name, 'login':login, 'email': email, 'activated': activated}, 200
+            data_user.password = "********"
+            payload_user = data_user.dict()
+            return payload_user, 200
 
-        except:
+        except Exception as error:
+            print(ERROR_MESSAGE.format(error))
             return INTERNAL_ERROR, 500
 
-    @users_ns.expect(token_header, user_post_put_fields)
-    @jwt_required()
+    # @jwt_required()
+    @user_ns.expect(token_header, user_put_fields)
     def put(self, id):
         try:
-            data = request.get_json()
-            data_update = UserModel().update(id, **data)
+            data = UserDtoUpdate.parse_obj(request.get_json())
+            payload = user_core.payload_update_user(data)
+            user_update = user_model.update(id, payload)
 
-            print(request.headers)
+            if user_update.modified_count == 0:
+                return NOTHING_UPDATE, 409
+            return UPDATE_SUCCESS, 200
 
-            # verificar se foi feito o update pelo atributo de count
-            print(data_update.modified_count)
-            if data_update.modified_count == 1:
-                return UPDATE_SUCCESS, 200
-            return NOTHING_UPDATE, 409
-
-        except:
+        except Exception as error:
+            print(ERROR_MESSAGE.format(error))
             return INTERNAL_ERROR, 500
 
-    @jwt_required()
+    # @jwt_required()
+    @user_ns.expect(token_header, user_put_fields)
     def delete(self, id):
         try:
-            data_delete = UserModel().delete(id)
+            data_delete = user_model.delete(id)
 
-            if data_delete.deleted_count == 1:
-                return {'message': 'user delete', 'id': f'{id}'}, 200
-            return USER_NOT_FOUND, 404
+            if data_delete.deleted_count == 0:
+                return USER_NOT_FOUND, 404
+            return USER_DELETED, 200
 
-        except:
+        except Exception as error:
+            print(ERROR_MESSAGE.format(error))
             return INTERNAL_ERROR, 500

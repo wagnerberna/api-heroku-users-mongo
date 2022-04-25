@@ -1,17 +1,18 @@
 import datetime
+import os
+from dotenv import load_dotenv
 
-# Classe pai
-# remover do app.run o debug=true
+load_dotenv()
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
+
 class Config:
-    # config Token
     DEBUG = True
     TESTING = True
-    JWT_SECRET_KEY = "Udemy!"
+    JWT_SECRET_KEY = JWT_SECRET_KEY
     JWT_BLACKLIST_ENABLED = True
     JWT_ACCESS_TOKEN_EXPIRES = datetime.timedelta(days=2)
-    # JWT_ACCESS_TOKEN_EXPIRES = datetime.timedelta(minutes=1)
+    # JWT_ACCESS_TOKEN_EXPIRES = datetime.timedelta(minutes=5)
 
-# classes de produção e teste
 class ProdConfig(Config):
     FLASK_ENV = 'production'
     DEBUG = False

@@ -1,42 +1,61 @@
 from src.service.mongo import Mongo
 from bson.objectid import ObjectId
+from src.model.dto.userDto import UserDtoGetById
 
 db = Mongo().mongo_connect()
 
 
 class UserModel:
+
+    list_fields = [
+        "user_id",
+        "name",
+        "email",
+        "login",
+        "password",
+        "activated",
+        "age",
+        "description",
+        "city",
+    ]
+
     def get_all(self):
-        data = list(db.users.find())
-        if data:
-            return data
-        return None
+        db_result = list(db.users.find())
+        if not db_result:
+            return None
+
+        payload_users = []
+        for user in db_result:
+            payload_users.append(UserDtoGetById(**user).dict())
+
+        return payload_users
 
     def get_by_id(self, id):
-        data = db.users.find_one({'_id': ObjectId(id)})
-        if data:
-            return data
-        return None
+        db_result = db.users.find_one({"_id": ObjectId(id)})
+        if not db_result:
+            return None
+        data_result = UserDtoGetById(**db_result)
 
-    def add(self, activated, name, email, login, password):
-        print('Model')
-        print(activated, name, email, login, password)
-        new_user = {'name': name, 'email': email, 'login': login, 'password': password, 'activated': activated}
-        print(new_user)
-        data = db.users.insert_one(new_user)
-        if data:
-            return data
-        return None
+        return data_result
 
-    def update(self, id, name, email, login, password, activated):
-        data = db.users.update_one(
-            {'_id': ObjectId(id)}, {'$set': {'name': name, 'email': email, 'login': login, 'password': password, 'activated': activated}}
+    def add(self, payload):
+        new_user = payload.dict()
+        db_result = db.users.insert_one(new_user)
+        if not db_result:
+            return None
+
+        return db_result
+
+    def update(self, id, payload):
+        user_update = payload.dict()
+        db_result = db.users.update_one(
+            {"_id": ObjectId(id)},
+            {"$set": user_update},
         )
-        if data:
-            return data
-        return None
+        if not db_result:
+            return None
+        return db_result
 
     def delete(self, id):
-        data = db.users.delete_one({'_id': ObjectId(id)})
-        if data:
-            return data
-        return None
+        db_result = db.users.delete_one({"_id": ObjectId(id)})
+        return db_result
